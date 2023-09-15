@@ -103,14 +103,12 @@ function ExecuteCommand ($commandPath, $commandArguments) {
 }
 
 function PreqRustdeskUpstreamVersion([string]$rustdeskURL) {
-  Write-Output("PreqRustdeskUpstreamVersion")
   #Get latest upstream version number
   $upstream_rustdesk_version = [System.Net.WebRequest]::Create($rustdeskURL).GetResponse().ResponseUri.OriginalString.split('/')[-1].Trim('v')
   return $upstream_rustdesk_version
 }
 
 function PreqRustdeskInstalledVersion([string]$rustdeskReg) {
-  Write-Output("PreqRustdeskInstalledVersion")
   #Check if Rustdesk is already installed and get version number
   if (Test-Path $rustdeskReg) {
     $installed_rustdesk_version = ((Get-ItemProperty $rustdeskReg).Version)
@@ -126,16 +124,18 @@ function Prerequisites([string]$VersionInstalled, [string]$VersionUpstream) {
   }
 
   if (!([System.Version]$VersionUpstream -gt [System.Version]$VersionInstalled)) {
-    Write-Output("Rustdesk version " + $VersionUpstream + " is already installed!")
+    Write-Output("Rustdesk version $VersionUpstream is already installed!")
     exit
   }
 }
 
 function DownloadRustdesk([string]$version) {
+  Write-Output("Download Rustdesk client https://github.com/rustdesk/rustdesk/releases/download/$version/rustdesk-$version-x86_64.exe")
   Invoke-WebRequest "https://github.com/rustdesk/rustdesk/releases/download/$version/rustdesk-$version-x86_64.exe" -Outfile "$env:Temp\rustdesk.exe"
 }
 
 function InstallRustdesk {
+  Write-Output("Silently install Rustdesk client")
   .$env:Temp\rustdesk.exe --silent-install
   Start-Sleep 20
   # Workaround: --silent-install does not quit process
@@ -143,10 +143,12 @@ function InstallRustdesk {
 }
 
 function StartRustdesk([string]$serviceName) {
+  Write-Output("Start Rustdesk service")
   Start-Service $serviceName
 }
 
 function StopRustdesk([string]$serviceName) {
+  Write-Output("Stop Rustdesk service")
   $serviceState = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
   if ($serviceState -eq $null) {
@@ -164,6 +166,8 @@ function StopRustdesk([string]$serviceName) {
 }
 
 function ConfigureRustdesk([string]$rdServer, [string]$rdKey, [bool]$enableAudio, [string]$serviceName) {
+  Write-Output("Configure Rustdesk client and service")
+
   $ipAddress = (Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.status -ne "Disconnected"}).IPv4Address.IPAddress
 
   # RustDesk2.toml
@@ -276,6 +280,7 @@ function WriteRustdeskCredsToNextcloudPasswords([string]$ncBaseUrl, [string]$ncU
       "username" = "$rustdeskID";
       "folder" = "$ncFolder";
       "hash" = "$rustdeskHash";
+      "url" = "rustdesk://connection/new/$rustdeskID";
     } | ConvertTo-Json
     $createNCPassword = Invoke-WebRequest -Uri "$ncBaseUrl/api/1.0/password/create" -Headers $Headers -UseBasicParsing -WebSession $Cookie -Body $JSON -ContentType application/json -Method Post
   } else {
@@ -287,6 +292,7 @@ function WriteRustdeskCredsToNextcloudPasswords([string]$ncBaseUrl, [string]$ncU
       "username" = "$rustdeskID";
       "folder" = "$ncFolder";
       "hash" = "$rustdeskHash";
+      "url" = "rustdesk://connection/new/$rustdeskID";
     } | ConvertTo-Json
     $updateNCPassword = Invoke-WebRequest -Uri "$ncBaseUrl/api/1.0/password/update" -Headers $Headers -UseBasicParsing -WebSession $Cookie -Body $JSON -ContentType application/json -Method Patch
   }
@@ -298,23 +304,24 @@ $rdInstalledVersion = PreqRustdeskInstalledVersion -rustdeskReg $rustdeskReg
 $serviceName = 'Rustdesk'
 
 Prerequisites -VersionInstalled $rdInstalledVersion -VersionUpstream $rdUpstreamVersion
+
 DownloadRustdesk -version $rdUpstreamVersion
+
 InstallRustdesk
+
 StopRustdesk -serviceName $serviceName
+
 ConfigureRustdesk -rdServer $rdServer -rdKey $rdKey -enableAudio $enableAudio -serviceName $serviceName
-$rustdeskPW = SetRustdeskPW -pwLength $pwLength 
+
+$rustdeskPW = SetRustdeskPW -pwLength $pwLength
+
 $rustdeskID = GetRustdeskID
+
 OutputIDAndPW -rustdeskID $rustdeskID -rustdeskPW $rustdeskPW
+
 StartRustdesk -serviceName $serviceName
 
 if ($toNextcloudPassword) {
-  $ncParams = @{
-    "ncBaseUrl" = "$ncBaseUrl";
-    "ncUsername" = "$ncUsername";
-    "ncToken" = "$ncToken";
-    "ncFolder" = "$ncFolder";
-    "rustdeskID" = "$rustdeskID";
-    "rustdeskPW" = "$rustdeskPW"
-  }
-  WriteRustdeskCredsToNextcloudPasswords $ncParams
+  Write-Output("Send Rustdesk credentials to Nextcloud Passwords app")
+  WriteRustdeskCredsToNextcloudPasswords -ncBaseUrl $ncBaseUrl -ncUsername $ncUsername -ncToken $ncToken -ncFolder $ncFolder -rustdeskID $rustdeskID -rustdeskPW $rustdeskPW
 }
