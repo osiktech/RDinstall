@@ -241,7 +241,7 @@ function OutputIDAndPW([string]$rustdeskID, [string]$rustdeskPW) {
   Write-Output("")
 }
 
-function WriteRustdeskCredsToNextcloudPasswords([string]ncBaseUrl, [string]$ncUsername, [string]$ncToken, [string]$ncFolder, [string]$rustdeskID, [string]$rustdeskPW) {
+function WriteRustdeskCredsToNextcloudPasswords([string]$ncBaseUrl, [string]$ncUsername, [string]$ncToken, [string]$ncFolder, [string]$rustdeskID, [string]$rustdeskPW) {
   #
   # API documentation can be found here https://git.mdns.eu/nextcloud/passwords/-/wikis/Developers/Index
   #
