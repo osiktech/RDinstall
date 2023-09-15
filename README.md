@@ -1,6 +1,7 @@
 # RDinstall
 
-Powershell script to install/update Rustdesk for deployments for MS Windows
+* Powershell script to install/update Rustdesk for deployments for MS Windows
+* based on [techahold/rustdeskinstall](https://github.com/techahold/rustdeskinstall) and my fork osiktech/rustdeskinstall
 
 ## Features
 
@@ -71,4 +72,4 @@ powershell -ExecutionPolicy ByPass .\rustdeskinstall.ps1 -rdServer my.self-hoste
 
 ## Notes
 
-PRs welcome
+* PRs welcome
