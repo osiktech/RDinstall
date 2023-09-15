@@ -120,7 +120,7 @@ function PreqRustdeskInstalledVersion([string]$rustdeskReg) {
 
 function Prerequisites([string]$VersionInstalled, [string]$VersionUpstream) {
   if (!(Test-Path $env:Temp)) {
-    New-Item -ItemType Directory -Force -Path $env:Temp > null
+    New-Item -ItemType Directory -Force -Path $env:Temp > $null
   }
 
   if (!([System.Version]$VersionUpstream -gt [System.Version]$VersionInstalled)) {
@@ -139,7 +139,7 @@ function InstallRustdesk {
   .$env:Temp\rustdesk.exe --silent-install
   Start-Sleep 20
   # Workaround: --silent-install does not quit process
-  Stop-Process -Name Rustdesk -Force > null
+  Stop-Process -Name Rustdesk -Force > $null
 }
 
 function StartRustdesk([string]$serviceName) {
@@ -162,7 +162,7 @@ function StopRustdesk([string]$serviceName) {
   }
 
   Stop-Service $serviceName
-  Stop-Process -Name $serviceName -Force > null
+  Stop-Process -Name $serviceName -Force > $null
 }
 
 function ConfigureRustdesk([string]$rdServer, [string]$rdKey, [bool]$enableAudio, [string]$serviceName) {
@@ -194,14 +194,14 @@ local-ip-addr = '$ipAddress'
   }
 
   if (!(Test-Path $env:AppData\RustDesk\config\RustDesk2.toml)) {
-    New-Item $env:AppData\RustDesk\config\RustDesk2.toml > null
+    New-Item $env:AppData\RustDesk\config\RustDesk2.toml > $null
   }
-  Set-Content $env:AppData\RustDesk\config\RustDesk2.toml $rd2Toml > null
+  Set-Content $env:AppData\RustDesk\config\RustDesk2.toml $rd2Toml > $null
 
   if (!(Test-Path $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml)) {
-    New-Item $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml > null
+    New-Item $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml > $null
   }
-  Set-Content $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml $rd2Toml > null
+  Set-Content $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml $rd2Toml > $null
 }
 
 function SetRustdeskPW([int]$pwLength) {
@@ -212,14 +212,17 @@ function SetRustdeskPW([int]$pwLength) {
   #    $env:Appdata\RustDesk\config\RustDesk.toml 
   #  to:
   #    $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk\RustDesk.toml
-  if ("$env:Appdata" -ne "$env:WinDir\ServiceProfiles\LocalService\AppData\Roaming") {
-    Copy-Item -Path "$env:Appdata\RustDesk\config\RustDesk.toml" -Destination "$env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml" -Force
+  #
+  # but not if running as SYSTEM
+  #
+  if ("$env:AppData" -ne "$env:WinDir\ServiceProfiles\LocalService\AppData\Roaming") {
+    if ("$env:AppData" -ne "$env:WinDir\system32\config\systemprofile\AppData\Roaming" ) {
+      Copy-Item -Path "$env:Appdata\RustDesk\config\RustDesk.toml" -Destination "$env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk.toml" -Force
+    }
   }
 
   if ($throwAway.ExitCode -eq 0) {
     return $rustdeskPW
-  } else {
-    return 255
   }
 }
 
