@@ -83,25 +83,6 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 $rustdeskURL = 'https://github.com/rustdesk/rustdesk/releases/latest'
 $rustdeskReg = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RustDesk\'
 
-function ExecuteCommand ($commandPath, $commandArguments) {
-  Write-Output("ExecuteCommand")
-  $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-  $pinfo.FileName = $commandPath
-  $pinfo.RedirectStandardError = $true
-  $pinfo.RedirectStandardOutput = $true
-  $pinfo.UseShellExecute = $false
-  $pinfo.Arguments = $commandArguments
-  $p = New-Object System.Diagnostics.Process
-  $p.StartInfo = $pinfo
-  $p.Start() | Out-Null
-  $p.WaitForExit()
-  [pscustomobject]@{
-    stdout = $p.StandardOutput.ReadToEnd()
-    stderr = $p.StandardError.ReadToEnd()
-    ExitCode = $p.ExitCode
-  }
-}
-
 function PreqRustdeskUpstreamVersion([string]$rustdeskURL) {
   #Get latest upstream version number
   $upstream_rustdesk_version = [System.Net.WebRequest]::Create($rustdeskURL).GetResponse().ResponseUri.OriginalString.split('/')[-1].Trim('v')
@@ -120,7 +101,7 @@ function PreqRustdeskInstalledVersion([string]$rustdeskReg) {
 
 function Prerequisites([string]$VersionInstalled, [string]$VersionUpstream) {
   if (!(Test-Path $env:Temp)) {
-    New-Item -ItemType Directory -Force -Path $env:Temp > $null
+    New-Item -ItemType Directory -Force -Path $env:Temp | Out-Null
   }
 
   if (!([System.Version]$VersionUpstream -gt [System.Version]$VersionInstalled)) {
@@ -136,10 +117,10 @@ function DownloadRustdesk([string]$version) {
 
 function InstallRustdesk {
   Write-Output("Silently install Rustdesk client")
-  .$env:Temp\rustdesk.exe --silent-install
-  Start-Sleep 20
+  cmd /c ""$env:Temp\rustdesk.exe --silent-install""
   # Workaround: --silent-install does not quit process
-  Stop-Process -Name Rustdesk -Force > $null
+  Start-Sleep 30
+  Stop-Process -Name Rustdesk -Force | Out-Null
 }
 
 function StartRustdesk([string]$serviceName) {
@@ -162,7 +143,7 @@ function StopRustdesk([string]$serviceName) {
   }
 
   Stop-Service $serviceName
-  Stop-Process -Name $serviceName -Force > $null
+  Stop-Process -Name $serviceName -Force | Out-Null
 }
 
 function ConfigureRustdesk([string]$rdServer, [string]$rdKey, [bool]$enableAudio, [string]$serviceName) {
@@ -193,20 +174,36 @@ local-ip-addr = '$ipAddress'
     $rd2Toml += "`nenable-audio = 'N'"
   }
 
-  if (!(Test-Path $env:AppData\RustDesk\config\RustDesk2.toml)) {
-    New-Item $env:AppData\RustDesk\config\RustDesk2.toml > $null
+  #Workaround: Copy permanent password settings from:
+  #    $env:Appdata\RustDesk\config\RustDesk.toml
+  #  to:
+  #    $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk\RustDesk.toml
+  #
+  # but not if running as SYSTEM
+  #
+  if ("$env:AppData" -ne "$env:WinDir\ServiceProfiles\LocalService\AppData\Roaming") {
+    if ("$env:AppData" -ne "$env:WinDir\system32\config\systemprofile\AppData\Roaming" ) {
+      if (!(Test-Path $env:AppData\RustDesk\config\RustDesk2.toml)) {
+        New-Item $env:AppData\RustDesk\config\RustDesk2.toml
+      }
+      Set-Content $env:AppData\RustDesk\config\RustDesk2.toml $rd2Toml | Out-Null
+    }
   }
-  Set-Content $env:AppData\RustDesk\config\RustDesk2.toml $rd2Toml > $null
+
 
   if (!(Test-Path $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml)) {
-    New-Item $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml > $null
+    New-Item $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml
   }
-  Set-Content $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml $rd2Toml > $null
+  Set-Content $env:WinDir\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml $rd2Toml | Out-Null
 }
 
 function SetRustdeskPW([int]$pwLength) {
   $rustdeskPW = (-join ((65..90) + (97..122) | Get-Random -Count $pwLength | % {[char]$_}))
-  $throwAway = ExecuteCommand -commandPath "$env:ProgramFiles\RustDesk\RustDesk.exe" -commandArguments "--password $rustdeskPW"
+  if ($env:ProgramW6432) {
+    cmd /c ""$env:ProgramW6432\Rustdesk\rustdesk.exe --password $rustdeskPW"" | Out-Null
+  } else {
+    cmd /c ""$env:ProgramFiles\Rustdesk\rustdesk.exe --password $rustdeskPW"" | Out-Null
+  }
 
   #Workaround: Copy permanent password settings from:
   #    $env:Appdata\RustDesk\config\RustDesk.toml 
@@ -221,19 +218,16 @@ function SetRustdeskPW([int]$pwLength) {
     }
   }
 
-  if ($throwAway.ExitCode -eq 0) {
-    return $rustdeskPW
-  }
+  return $rustdeskPW
 }
 
 function GetRustdeskID {
-  $rustdeskID = ExecuteCommand -commandPath "$env:ProgramFiles\RustDesk\rustdesk.exe" -commandArguments " --get-id"
-
-  if ($rustdeskID.ExitCode -eq 0) {
-    return $rustdeskID.stdout.Trim()
+  if ($env:ProgramW6432) {
+    $rustdeskID = cmd /c ""$env:ProgramW6432\Rustdesk\rustdesk.exe --get-id""
   } else {
-    return 255
+    $rustdeskID = cmd /c ""$env:ProgramFiles\Rustdesk\rustdesk.exe --get-id""
   }
+  return $rustdeskID
 }
 
 function OutputIDAndPW([string]$rustdeskID, [string]$rustdeskPW) {
@@ -326,5 +320,5 @@ StartRustdesk -serviceName $serviceName
 
 if ($toNextcloudPassword) {
   Write-Output("Send Rustdesk credentials to Nextcloud Passwords app")
-  WriteRustdeskCredsToNextcloudPasswords -ncBaseUrl $ncBaseUrl -ncUsername $ncUsername -ncToken $ncToken -ncFolder $ncFolder -rustdeskID $rustdeskID -rustdeskPW $rustdeskPW
+  WriteRustdeskCredsToNextcloudPasswords -ncBaseUrl "$ncBaseUrl" -ncUsername "$ncUsername" -ncToken "$ncToken" -ncFolder "$ncFolder" -rustdeskID "$rustdeskID" -rustdeskPW "$rustdeskPW"
 }
